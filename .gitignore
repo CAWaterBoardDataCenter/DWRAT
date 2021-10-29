@@ -1,0 +1,6 @@
+.spyproject
+*.MPS
+*.SOL
+input/*.csv
+output/*.csv
+
