@@ -118,6 +118,7 @@ for c, day in enumerate(data_range["Dates"].unique()):
     net_flow = flow_table_df[day].to_numpy()
     
     # AVAILABLE FLOW: 
+    # k is used for basins, i is used for users 
     # available flow: initialize and populate a 1 x k list for available basin flow
     # available flow in basin k is sum of all upstream basin inflows less environmental requirement
     # matrix / vector operations:
@@ -200,6 +201,9 @@ for c, day in enumerate(data_range["Dates"].unique()):
     
     # basin riparian demand dictionary for use later
     basin_demand = {basins[k] : (np.matmul(riparian_basin_user_matrix, riparian_demand_data)[k]) for k, basin in enumerate(basins)}
+    # Dataframe same as above
+    basin_demand_df = pd.DataFrame.from_dict(basin_demand, orient = "index")
+    basin_demand_df.columns = ["riparian_demand"]
     # matrix / vector operations:
     # !! incomplete
     
@@ -225,8 +229,61 @@ for c, day in enumerate(data_range["Dates"].unique()):
 ##################### SEE SEPARATE INSTRUCTIONS PRIOR TO RUNNING THIS LINE ###################
     # Read in the override file from the input folder with the correct path and name:
     rip_basin_proportions_output = pd.read_csv("input/rip_basin_proportions_UPDATE.csv", index_col = "BASIN")
+
+
+
+#########################  CALCULATION OF NET AVAILABLE FLOW #####################
+    # collect some riparian output
+    basin_proportion_matrix = np.array(rip_basin_proportions_output[dates])
+    # riparian user allocations (basin proportion * user demand)
+    rip_user_allocations_output = pd.DataFrame(((np.matmul(riparian_basin_user_matrix.transpose(), basin_proportion_matrix))*rip_demand_matrix),columns=[dates], index=rip_users)
+    rip_user_allocations_output.index.name = "USER"    
+    rip_user_allocations_matrix = np.array(rip_user_allocations_output[dates])
+        
+    # aggregate basin riparian allocations
+    rip_basin_allocations = np.matmul(riparian_basin_user_matrix, rip_user_allocations_matrix)
+    rip_basin_allocations_output = pd.DataFrame(rip_basin_allocations, columns=[dates], index=basins)
+    rip_basin_allocations_output.index.name = "BASIN"
     
-#########################  CALCULATION OF NET AVAILABLE FLOW SUBROUTINE #####################
+    # accumulated flow not accounting for riparian allocations
+    available_flow_df = pd.DataFrame(available_flow_data, index = basins)
+    available_flow_df.columns= ["cumulative_flow"]
+    # individual basin inflow 
+    available_flow_df["basin_flow"] = pd.DataFrame(net_flow, index = basins)     
+    # aggregate basin riparian allocations from above
+    available_flow_df["basin_allocations"] = rip_basin_allocations_output
+    ### upstream riparian allocations 
+    available_flow_df["rip_upstream_allocations"] =  np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix)
+        
+    available_flow_df["riparian_demand"] = basin_demand_df["riparian_demand"]
+    # NEED TO REMOVE BASINS WITH RIPARIAN SHORTAGE FOR CALCULATIONS BELOW
+    # calculate riparian shortage Y/N (0 = shortage, 1 = not)
+    available_flow_df["short_rip_basins"] = basin_proportion_matrix
+    for k, proportion in enumerate(basin_proportion_matrix):
+        if proportion < 1 and available_flow_df["riparian_demand"][k]> 0:
+            available_flow_df["short_rip_basins"][k] = 0
+        else:
+            available_flow_df["short_rip_basins"][k] = 1
+       
+    # net available flow:       
+    # (cumulative_flow without in basin flow where there is riparian shortage)
+    # minus
+    # (rip_upstream_allocations - allocations where there is riparian shortage)
+    # replace allocated proportions with rip shortage Y/N
+    basin_proportion_matrix_new = np.array(pd.DataFrame(available_flow_df["short_rip_basins"]) )
+    
+    # recalculate available flow matrix without shorted basin flows 
+    available_flow_df["new_cumulative_flow"] = np.matmul(upstream_connectivity_matrix, np.array(available_flow_df["basin_flow"]*available_flow_df["short_rip_basins"])) 
+    # recalculate user allocations without shorted basin users:
+    rip_user_allocations_output_new = pd.DataFrame(((np.matmul(riparian_basin_user_matrix.transpose(), basin_proportion_matrix_new))*rip_demand_matrix),columns=[dates], index=rip_users)
+    rip_user_allocations_matrix_new = np.array(rip_user_allocations_output_new)
+    available_flow_df["new_upstream_allocations"] =  np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix_new)
+    # availabe flow for appropriatives is new cumulative flows less new upstream allocations   
+    available_flow_df["available_app_flow"] = available_flow_df["new_cumulative_flow"] - available_flow_df["new_upstream_allocations"]
+    # output if desired   
+    available_flow_df.to_csv("output/available_appropriative_flow.csv")
+    
+#########################  CALCULATION OF NET FLOW LEAVING BASIN SUBROUTINE #################
 #############################################################################################
 ##################### SEE SEPARATE INSTRUCTIONS FOR EXPLANATION  ############################
 
@@ -283,7 +340,8 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # need upstream_connectivity_matrix without the diagonal 1s
     np.fill_diagonal(upstream_connectivity_matrix_mod, 0)
     # now need to add back ones for headwaters basins
-    headwaters_NEW_ROUTE = ['L_14', 'L_15', 'L_16', 'L_17', 'L_18', 'L_19', 'L_20', 'L_21', 'L_23', 'L_27', 'L_28']
+    headwaters_NEW_ROUTE = list(set(list(flow_table_df.index) ) - set(list(flow_table_df["FLOWS_TO"])))
+    # headwaters_NEW_ROUTE = ['L_14', 'L_15', 'L_16', 'L_17', 'L_18', 'L_19', 'L_20', 'L_21', 'L_23', 'L_27', 'L_28']
     hw = []
     for basin in headwaters_NEW_ROUTE:
         hw.append(basins.index(basin))        
@@ -292,12 +350,9 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # need a matrix of directly upstream basins
     up_df = pd.read_csv("input/next_upstream.csv", index_col = "BASIN")
     up_matrix = up_df.to_numpy()
-    
     next_downstream = pd.read_csv("input/next_downstream.csv", index_col = "BASIN")
-    
     basin_order_LSR =[k for k, basin in enumerate(basins[1:])]
     
-
     for k in basin_order_LSR:
         # sum of upstream allocations
         a = np.matmul(upstream_connectivity_matrix_mod, new_df["flow_allocation"])
@@ -368,10 +423,8 @@ for c, day in enumerate(data_range["Dates"].unique()):
             else:
                 new_df["net_appropriative_available"][k+1] = new_df["available_flow_data"][k+1]-new_df["rip_upstream_allocations"][k+1]
             
-                new_df.to_csv("output/new_df_working.csv")
+                new_df.to_csv("output/flow_leaving_basin.csv")
   
-            new_df["net_appropriative_available"]
-    
 #################################       APPROPRIATIVE_LP   ##############################
 #########################################################################################
 #########################################################################################
@@ -385,8 +438,7 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # DICTIONARIES
     app_demand = {app_users[i] : appropriative_demand_data[i] for i, user in enumerate(app_users)}
     shortage_penalty = {app_users[i] : shortage_penalty_data[i] for i, user in enumerate(app_users)}
-    # app_available_flow = {basins[k] : available_flow_data[k] for k, basin in enumerate(basins)}
-    app_available_flow = {basins[k] : new_df["net_appropriative_available"][k] for k, basin in enumerate(basins)}
+    app_available_flow = {basins[k] : available_flow_df["available_app_flow"][k] for k, basin in enumerate(basins)}
 
     
     # DEFINE PROBLEM
@@ -456,20 +508,19 @@ print("Hi. I'm done. Time at completion was:", finish, ". Starting time was:", s
 #########################################################################################
 
 # basin output
-basin_output_df = new_df[['available_flow_data', 'net_flow', "flow_allocation"]]
+basin_output_df = available_flow_df[['cumulative_flow', 'basin_flow']]
 basin_output_df["riparian_proportions"] = rip_basin_proportions_output
-basin_output_df["rip_basin_allocations"] = new_df["basin_allocations"] 
-basin_output_df["rip_basin_demand"] = basin_demand.values()
+basin_output_df["rip_basin_allocations"] = available_flow_df["basin_allocations"] 
+basin_output_df["rip_basin_demand"] = available_flow_df["riparian_demand"]
 basin_output_df["rip_basin_shortage"] = basin_output_df["rip_basin_demand"] - basin_output_df["rip_basin_allocations"] 
 basin_output_df["rip_basin_shortage_%"] = basin_output_df["rip_basin_shortage"] / basin_output_df["rip_basin_demand"]
 basin_output_df["appropriative_output"] = "*"
-basin_output_df["appropriative_available_flow"] = new_df["net_appropriative_available"]
+basin_output_df["appropriative_available_flow"] = available_flow_df["available_app_flow"]
 basin_output_df["app_basin_allocations"] = app_basin_allocations
 app_demand_matrix = app_demand_df[dates].to_numpy()
 basin_output_df["app_basin_demand"] = np.matmul(appropriative_basin_user_matrix , app_demand_matrix)
 basin_output_df["app_basin_shortage"] = basin_output_df["app_basin_demand"] - basin_output_df["app_basin_allocations"] 
 basin_output_df["app_basin_shortage_%"] = basin_output_df["app_basin_shortage"] / basin_output_df["app_basin_demand"]
-
 basin_output_df.to_csv("output/basin_output.csv")
 
 # # user output
@@ -494,9 +545,7 @@ rip_user_output_df["rip_allocations"] = rip_user_allocations_output[dates]
 rip_user_output_df["rip_demand"] = rip_demand_df[dates]
 rip_user_output_df["rip_shortage"] = rip_user_output_df["rip_demand"] - rip_user_output_df["rip_allocations"]
 rip_user_output_df["rip_shortage_%"] = rip_user_output_df["rip_shortage"] / rip_user_output_df["rip_demand"]
-
 rip_user_output_df.to_csv("output/riparian_user_output.csv")
-
 
 #################################  WRITING OUTPUT FOR PORTAL TOOL########################
 #########################################################################################
@@ -506,19 +555,25 @@ rip_user_output_df.to_csv("output/riparian_user_output.csv")
 
 # basin output for portal tool and map
 # new_df.columns
-basin_output_df = new_df[['available_flow_data', "flow_allocation", "net_flow"]]
+basin_output_df = available_flow_df[["cumulative_flow", "new_cumulative_flow", "basin_flow"]]
 basin_output_df["sep_riparian_proportions"] = rip_basin_proportions_output
-basin_output_df["sep_rip_basin_allocations"] = new_df["basin_allocations"] 
-basin_output_df["sep_rip_basin_demand"] = basin_demand.values()
+basin_output_df["sep_rip_basin_allocations"] = available_flow_df["basin_allocations"] 
+basin_output_df["sep_rip_basin_demand"] = available_flow_df["riparian_demand"]
 basin_output_df["sep_rip_basin_shortage"] = basin_output_df["sep_rip_basin_demand"] - basin_output_df["sep_rip_basin_allocations"] 
 basin_output_df["sep_rip_basin_shortage_%"] = basin_output_df["sep_rip_basin_shortage"] / basin_output_df["sep_rip_basin_demand"]
-# basin_output_df["appropriative_output"] = "*"
-# basin_output_df["appropriative_available_flow"] = new_df["net_appropriative_available"]
+
 basin_output_df["sep_app_basin_allocations"] = app_basin_allocations
 app_demand_matrix = app_demand_df[dates].to_numpy()
 basin_output_df["sep_app_basin_demand"] = np.matmul(appropriative_basin_user_matrix , app_demand_matrix)
 basin_output_df["sep_app_basin_shortage"] = basin_output_df["sep_app_basin_demand"] - basin_output_df["sep_app_basin_allocations"] 
 basin_output_df["sep_app_basin_shortage_%"] = basin_output_df["sep_app_basin_shortage"] / basin_output_df["sep_app_basin_demand"]
+
+basin_output_df.columns = ['available_flow_data', 'new_cumulative_flow', "net_flow",
+       'sep_riparian_proportions', 'sep_rip_basin_allocations',
+       'sep_rip_basin_demand', 'sep_rip_basin_shortage',
+       'sep_rip_basin_shortage_%', 'sep_app_basin_allocations',
+       'sep_app_basin_demand', 'sep_app_basin_shortage',
+       'sep_app_basin_shortage_%']
 
 basin_output_df.to_csv("output/basin_output_PORTAL.csv")
 

@@ -41,17 +41,29 @@ cm_df.to_csv("input/basin_connectivity_matrix.csv", index = True)
 
 
 
+# Script that constructs the next_downstream matrix
+# initialize an empty k x k matrix
+empty_matrix = numpy.zeros((numpy.size(basins), numpy.size(basins)), dtype = int)
+# set value to 1 at the index value of the FLOWS_TO basin
+for k, basin in enumerate(flow_table_df.index):
+    empty_matrix[k][ index_dictionary[flow_table_df["FLOWS_TO"][k]]] = 1
+# create datafram and write output
+next_down_df = pd.DataFrame(empty_matrix, index = basins, columns = basins)
+next_down_df.index.name = "BASIN"
+next_down_df.to_csv("input/next_downstream.csv", index = True)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+# Script that constructs the next_upstream matrix
+# initialize an empty k x k matrix
+empty_matrix_1 = numpy.zeros((numpy.size(basins), numpy.size(basins)), dtype = int)
+# set value to 1 at the index value of the FLOWS_TO basin
+# need a column of basins
+flow_table_df["BASIN"] = flow_table_df.index
+for k, basin in enumerate(flow_table_df["FLOWS_TO"]):
+    for i in flow_table_df["BASIN"][flow_table_df["FLOWS_TO"]==basin]:
+        empty_matrix_1[  index_dictionary[basin], index_dictionary[flow_table_df["BASIN"][flow_table_df["FLOWS_TO"]==basin][i]]] = 1
+    
+# create datafram and write output
+next_up_df = pd.DataFrame(empty_matrix_1, index = basins, columns = basins)
+next_up_df.index.name = "BASIN"
+next_up_df.to_csv("input/next_upstream.csv", index = True)
