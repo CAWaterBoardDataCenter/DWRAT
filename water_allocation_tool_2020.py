@@ -112,6 +112,7 @@ app_user_allocations_output = pd.DataFrame(columns=[output_cols], index= app_use
 ###########################################################################################
 ###########################################################################################
 
+#%%
 for c, day in enumerate(data_range["Dates"].unique()):
     # print(c, day)
     riparian_demand_data = rip_demand_df[day].to_numpy()
@@ -130,7 +131,7 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # number of users upstream of i divided by total users
     # matrix / vector operations:
     # row sum of the k x i user connectivity matrix / count of  i = k x 1 list of downstream penalties
-    downstream_penalty_list = np.divide(np.sum(riparian_user_connectivity_matrix, 1), np.count_nonzero(rip_users))
+    downstream_penalty_list = 10*(np.divide(np.sum(riparian_user_connectivity_matrix, 1), np.count_nonzero(rip_users)))
     
     # UPSTREAM BASIN DEMAND
     # basin-wide demand is the sum of user demand upstream of each basin
@@ -141,7 +142,6 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # ALPHA
     # minimum of the ratios of downstream penalties to basin demands, element by element division, division by zero should return 0
     alpha = min(np.divide(downstream_penalty_list, basin_rip_demand_data_T, out = np.full_like(downstream_penalty_list, 999999999), where=basin_rip_demand_data_T!=0))
-
     # DICTIONARIES FOR CONSTRAINTS
     available_flow = {basins[k] : available_flow_data[k] for k, basin in enumerate(basins)}
     downstream_penalty = {basins[k] : downstream_penalty_list[k] for k, basin in enumerate(basins)}
@@ -216,6 +216,18 @@ for c, day in enumerate(data_range["Dates"].unique()):
     for k in basins:
         rip_basin_proportions_output.loc[k, [day]] = basin_proportions[k].varValue
 
+
+
+
+
+#%%
+
+
+
+
+
+
+
 ################################    END OF RIPARIAN LP     ##############################
 #########################################################################################
 #########################################################################################
@@ -230,7 +242,7 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # Read in the override file from the input folder with the correct path and name:
     rip_basin_proportions_output = pd.read_csv("input/rip_basin_proportions_UPDATE.csv", index_col = "BASIN")
 
-
+#%%
 #########################  CALCULATION OF NET AVAILABLE FLOW #####################
     # collect some riparian output
     basin_proportion_matrix = np.array(rip_basin_proportions_output[dates])
@@ -282,22 +294,24 @@ for c, day in enumerate(data_range["Dates"].unique()):
     
     # output if desired   
     available_flow_df.to_csv("output/available_appropriative_flow.csv")
+#%%
 
-  #################################       APPROPRIATIVE_LP   ##############################
+#################################       APPROPRIATIVE_LP   ##############################
 #########################################################################################
 #########################################################################################
 #########################################################################################
     
     appropriative_demand_data = app_demand_df[day].to_numpy()
     priority = app_demand_df["PRIORITY"].to_numpy()
-    shortage_penalty_data = np.array([(app_users_count - priority[i]) for i, user in enumerate(app_users)])    
-        
+    # shortage pentalty (inverse of priority)      
+    shortage_penalty_data = (np.array([(1000*(1/(priority[i]))) for i, user in enumerate(app_users)])    )
+ 
     # DICTIONARIES
     app_demand = {app_users[i] : appropriative_demand_data[i] for i, user in enumerate(app_users)}
     shortage_penalty = {app_users[i] : shortage_penalty_data[i] for i, user in enumerate(app_users)}
     app_available_flow = {basins[k] : available_flow_df["available_app_flow"][k] for k, basin in enumerate(basins)}
 
-        # DEFINE PROBLEM
+    # DEFINE PROBLEM
     Appropriative_LP = pulp.LpProblem("AppropriativeProblem", pulp.LpMinimize)
     
     # DEFINE DECISION VARIABLES
@@ -377,15 +391,27 @@ app_demand_matrix = app_demand_df[dates].to_numpy()
 basin_output_df["app_basin_demand"] = np.matmul(appropriative_basin_user_matrix , app_demand_matrix)
 basin_output_df["app_basin_shortage"] = basin_output_df["app_basin_demand"] - basin_output_df["app_basin_allocations"] 
 basin_output_df["app_basin_shortage_%"] = basin_output_df["app_basin_shortage"] / basin_output_df["app_basin_demand"]
+basin_output_df = basin_output_df.add_suffix("_" + day)
 basin_output_df.to_csv("output/basin_output.csv")
 
 # # user output
 # ## Appropriative
+
+def five_sig_figs(x):
+    output =  f"{x:.5f}"
+    return output
+
 user_output_df = app_demand_df[["BASIN", "PRIORITY"]]
 user_output_df["app_allocations"] = app_user_allocations_output[dates]
 user_output_df["app_demand"] = app_demand_df[dates]
-user_output_df["app_shortage"] = user_output_df["app_demand"] - user_output_df["app_allocations"]
-user_output_df["app_shortage_%"] = user_output_df["app_shortage"] / user_output_df["app_demand"]
+user_output_df["app_shortage"] = (user_output_df["app_demand"] - user_output_df["app_allocations"])
+user_output_df["app_shortage_%"] = (user_output_df["app_shortage"] / user_output_df["app_demand"])*100
+# change values less than 0.00099 to 0 and round to 5 significant figures
+user_output_df["app_shortage"][user_output_df["app_shortage"] < 0.00099] = 0
+user_output_df["app_shortage_%"][user_output_df["app_shortage_%"] < 0.00099] = 0
+user_output_df["app_shortage"] = user_output_df["app_shortage"].apply(five_sig_figs)
+user_output_df["app_shortage_%"] = user_output_df["app_shortage_%"].apply(five_sig_figs)
+user_output_df = user_output_df.add_suffix("_" + day)
 user_output_df.to_csv("output/appropriative_user_output.csv")
 
 ## Riparian
@@ -401,6 +427,12 @@ rip_user_output_df["rip_allocations"] = rip_user_allocations_output[dates]
 rip_user_output_df["rip_demand"] = rip_demand_df[dates]
 rip_user_output_df["rip_shortage"] = rip_user_output_df["rip_demand"] - rip_user_output_df["rip_allocations"]
 rip_user_output_df["rip_shortage_%"] = rip_user_output_df["rip_shortage"] / rip_user_output_df["rip_demand"]
+# change values less than 0.00099 to 0 and round to 5 significant figures
+rip_user_output_df["rip_shortage"][rip_user_output_df["rip_shortage"] < 0.00099] = 0
+rip_user_output_df["rip_shortage_%"][rip_user_output_df["rip_shortage_%"] < 0.00099] = 0
+rip_user_output_df["rip_shortage"] = rip_user_output_df["rip_shortage"].apply(five_sig_figs)
+rip_user_output_df["rip_shortage_%"] = rip_user_output_df["rip_shortage_%"].apply(five_sig_figs)
+rip_user_output_df = rip_user_output_df.add_suffix("_" + day)
 rip_user_output_df.to_csv("output/riparian_user_output.csv")
 
 #################################  WRITING OUTPUT FOR PORTAL TOOL########################
