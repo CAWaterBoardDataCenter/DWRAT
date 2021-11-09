@@ -112,7 +112,7 @@ app_user_allocations_output = pd.DataFrame(columns=[output_cols], index= app_use
 ###########################################################################################
 ###########################################################################################
 
-#%%
+
 for c, day in enumerate(data_range["Dates"].unique()):
     # print(c, day)
     riparian_demand_data = rip_demand_df[day].to_numpy()
@@ -128,11 +128,15 @@ for c, day in enumerate(data_range["Dates"].unique()):
     available_flow_data = np.matmul(upstream_connectivity_matrix, net_flow.T) 
 
     # DOWNSTREAM PENALTY
-    # number of users upstream of i divided by total users
+    # number of basins upstream of k divided by total basins
     # matrix / vector operations:
-    # row sum of the k x i user connectivity matrix / count of  i = k x 1 list of downstream penalties
-    downstream_penalty_list = 10*(np.divide(np.sum(riparian_user_connectivity_matrix, 1), np.count_nonzero(rip_users)))
+    # row sum of the k x k downstream connectivity matrix / count of  k x 1 list of basins
     
+    # OLD
+    # downstream_penalty_list = (np.divide(np.sum(riparian_user_connectivity_matrix, 1), np.count_nonzero(rip_users)))
+    # NEW
+    downstream_penalty_list = (np.divide(np.sum(downstream_connectivity_matrix, 1), np.count_nonzero(basins)))
+      
     # UPSTREAM BASIN DEMAND
     # basin-wide demand is the sum of user demand upstream of each basin
     # matrix / vector operations:
@@ -174,11 +178,10 @@ for c, day in enumerate(data_range["Dates"].unique()):
     upstream_allocation = {basins[k] : upstream_allocation_list[k] for k, basin in enumerate(basins)}
     
     # OBJECTIVE FUNCTION
-    Riparian_LP += alpha * pulp.lpSum([basin_proportions[k]*downstream_penalty[k] for k in basins]) - pulp.lpSum([user_allocation[i] for i in rip_users])
-    # matrix / vector operations:
-    # !! incomplete
-    
-    
+    # OLD
+    # Riparian_LP += alpha * pulp.lpSum([basin_proportions[k]*downstream_penalty[k] for k in basins]) - pulp.lpSum([user_allocation[i] for i in rip_users])
+    # NEW
+    Riparian_LP += alpha * -pulp.lpSum([basin_proportions[k]*downstream_penalty[k] for k in basins]) - pulp.lpSum([user_allocation[i] for i in rip_users])
     
     # CONSTRAINTS
     # mass balance
@@ -217,35 +220,17 @@ for c, day in enumerate(data_range["Dates"].unique()):
         rip_basin_proportions_output.loc[k, [day]] = basin_proportions[k].varValue
 
 
-
-
-
-#%%
-
-
-
-
-
-
-
 ################################    END OF RIPARIAN LP     ##############################
 #########################################################################################
 #########################################################################################
 
-#################################  RIPARIAN PROPORTIONS MANUAL OVERRIDE  ################
-# write the proportions output to a file for corrections
-    dates = data_range["Dates"]
-    rip_demand_matrix = np.array(rip_demand_df[dates])
-    rip_basin_proportions_output.to_csv("input/rip_basin_proportions_0.csv")
-
-##################### SEE SEPARATE INSTRUCTIONS PRIOR TO RUNNING THIS LINE ###################
-    # Read in the override file from the input folder with the correct path and name:
-    rip_basin_proportions_output = pd.read_csv("input/rip_basin_proportions_UPDATE.csv", index_col = "BASIN")
-
 #%%
 #########################  CALCULATION OF NET AVAILABLE FLOW #####################
     # collect some riparian output
+    dates = data_range["Dates"]
+    rip_demand_matrix = np.array(rip_demand_df[dates])
     basin_proportion_matrix = np.array(rip_basin_proportions_output[dates])
+    
     # riparian user allocations (basin proportion * user demand)
     rip_user_allocations_output = pd.DataFrame(((np.matmul(riparian_basin_user_matrix.transpose(), basin_proportion_matrix))*rip_demand_matrix),columns=[dates], index=rip_users)
     rip_user_allocations_output.index.name = "USER"    
@@ -366,7 +351,7 @@ for c, day in enumerate(data_range["Dates"].unique()):
 finish = datetime.datetime.now().time()
 print("Hi. I'm done. Time at completion was:", finish, ". Starting time was:", start)
 
-
+#%%
 ################################    END OF APPROPRIATIVE LP  ########################
 #####################################################################################
 #####################################################################################
