@@ -19,7 +19,7 @@ from main_date_range import date_string
 # yyyy-mm-dd or yyyy-mm are the recommended daily / monthly date formats. But mm/dd/yyyy and yyyy-m-d are also available.
 
 # a data range can be specified with these two lines:
-dates_to_run = date_string("2021-09", "2021-09")
+dates_to_run = date_string("2021-05", "2021-09")
 dates_to_run.to_csv("input/data_range.csv")
 
 # or just run existing file for evaluation by commenting above out
@@ -135,23 +135,32 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # OLD
     # downstream_penalty_list = (np.divide(np.sum(riparian_user_connectivity_matrix, 1), np.count_nonzero(rip_users)))
     # NEW
-    downstream_penalty_list = (np.divide(np.sum(downstream_connectivity_matrix, 1), np.count_nonzero(basins)))
-      
+    downstream_penalty_list = (np.divide(np.sum(upstream_connectivity_matrix, 1), np.count_nonzero(basins)))
+    
+    # BASIN RIPARIAN DEMAND + dictionary 
+    basin_demand = {basins[k] : (np.matmul(riparian_basin_user_matrix, riparian_demand_data)[k]) for k, basin in enumerate(basins)}
+    # Dataframe same as above
+    basin_demand_df = pd.DataFrame.from_dict(basin_demand, orient = "index")
+    basin_demand_df.columns = ["riparian_demand"]
+    # matrix / vector operations:
+    # !! incomplete
+        
     # UPSTREAM BASIN DEMAND
     # basin-wide demand is the sum of user demand upstream of each basin
     # matrix / vector operations:
     # 1 x i list of user demand ∙ i x k user connectivity matrix  = 1 x k basin demand matrix
     basin_rip_demand_data_T = np.matmul(riparian_demand_data, riparian_user_connectivity_matrix_T)
-   
-    # ALPHA
+    
+    # ALPHA - Not currently used
     # minimum of the ratios of downstream penalties to basin demands, element by element division, division by zero should return 0
-    alpha = min(np.divide(downstream_penalty_list, basin_rip_demand_data_T, out = np.full_like(downstream_penalty_list, 999999999), where=basin_rip_demand_data_T!=0))
+    # alpha = min(np.divide(downstream_penalty_list, basin_rip_demand_data_T, out = np.full_like(downstream_penalty_list, 999999999), where=basin_rip_demand_data_T!=0))
+    
     # DICTIONARIES FOR CONSTRAINTS
     available_flow = {basins[k] : available_flow_data[k] for k, basin in enumerate(basins)}
     downstream_penalty = {basins[k] : downstream_penalty_list[k] for k, basin in enumerate(basins)}
     
     # DEFINE PROBLEM
-    Riparian_LP = pulp.LpProblem("RiparianAllocation", pulp.LpMinimize)
+    Riparian_LP = pulp.LpProblem("RiparianAllocation", pulp.LpMaximize)
     
     # DEFINE DECISION VARIABLES
     basin_proportions = pulp.LpVariable.dicts("Proportions", basins, 0, 1, cat="Continuous")
@@ -181,7 +190,7 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # OLD
     # Riparian_LP += alpha * pulp.lpSum([basin_proportions[k]*downstream_penalty[k] for k in basins]) - pulp.lpSum([user_allocation[i] for i in rip_users])
     # NEW
-    Riparian_LP += alpha * -pulp.lpSum([basin_proportions[k]*downstream_penalty[k] for k in basins]) - pulp.lpSum([user_allocation[i] for i in rip_users])
+    Riparian_LP += pulp.lpSum([user_allocation[i] for i in rip_users]) - pulp.lpSum([basin_proportions[k]*downstream_penalty[k]*basin_demand[k] for k in basins])  
     
     # CONSTRAINTS
     # mass balance
@@ -201,14 +210,6 @@ for c, day in enumerate(data_range["Dates"].unique()):
     for v in Riparian_LP.variables():
           print(v.name, "=", v.varValue)
     print("Objective = ", pulp.value(Riparian_LP.objective))
-    
-    # basin riparian demand dictionary for use later
-    basin_demand = {basins[k] : (np.matmul(riparian_basin_user_matrix, riparian_demand_data)[k]) for k, basin in enumerate(basins)}
-    # Dataframe same as above
-    basin_demand_df = pd.DataFrame.from_dict(basin_demand, orient = "index")
-    basin_demand_df.columns = ["riparian_demand"]
-    # matrix / vector operations:
-    # !! incomplete
     
     # this loop turns LP variable output into a list
     basin_allocation = []
