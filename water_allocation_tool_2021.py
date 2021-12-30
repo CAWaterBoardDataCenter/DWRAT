@@ -47,8 +47,9 @@ data_range["Dates"].to_csv("output/data_range.csv", header = True)
 # flow
 start = datetime.datetime.now().time()
 flow_table_df = pd.read_csv('input/flows.csv', index_col = "BASIN")
-# flow_table_df.sort_index(axis = "index")
 flow_table_df = flow_table_df.sort_index(axis = "index")
+# flow matrix for use later
+flow_matrix = np.array(flow_table_df[data_range["Dates"].unique()])
 
 # riparian demand
 rip_demand_df = pd.read_csv('input/riparian_demand.csv')
@@ -62,6 +63,7 @@ app_demand_df.set_index("USER", inplace = True)
 app_demand_df.sort_index(axis = "index", inplace = True)
 app_users = app_demand_df.index.values
 
+# number of appropriative users 
 app_users_count = np.size(app_users)
     
 # basically just user BASIN in matrix form
@@ -89,17 +91,25 @@ appropriative_user_connectivity_matrix = appropriative_user_connectivity_matrix_
 
 # basin connectivity
 downstream_connectivity_df = pd.read_csv("input/basin_connectivity_matrix.csv", index_col = "BASIN")
+downstream_connectivity_df.sort_index(axis = "index", inplace = True)
+downstream_connectivity_df.sort_index(axis = "columns", inplace = True)
 downstream_connectivity_matrix = downstream_connectivity_df.to_numpy()
 upstream_connectivity_matrix = downstream_connectivity_matrix.T
 
-# need another copy of upstream connectivity matrix for modification in "Calculation of Net Available Flow Subroutine" below
-upstream_connectivity_matrix_mod = downstream_connectivity_matrix.T
-
-# list of basins
+# Cumulative (available) flow matrix for use later 
+cumulative_flow_matrix = np.matmul(upstream_connectivity_matrix, flow_table_df[data_range["Dates"].unique()])
+# List of basins
 basins = list(downstream_connectivity_df.index)
+# riparian demand matrix for use later
+rip_demand_matrix = np.array(rip_demand_df[data_range["Dates"].unique()])
+# basin riparian demand matrix for use later
+rip_basin_demand_matrix = np.matmul(riparian_basin_user_matrix, rip_demand_matrix)
+rip_basin_demand_df = pd.DataFrame(np.matmul(riparian_basin_user_matrix, rip_demand_matrix), index = basins, columns = [data_range["Dates"].unique()]  )
+
+
+
 
 ########################### CREATE EMPTY OUTPUT DATAFRAMES #################################
-# create columns using data_range
 output_cols = data_range["Dates"].unique().tolist()
 # Riparian output files
 rip_basin_proportions_output = pd.DataFrame(columns=[output_cols], index=basins)
@@ -144,13 +154,13 @@ for c, day in enumerate(data_range["Dates"].unique()):
     basin_demand_df.columns = ["riparian_demand"]
     # matrix / vector operations:
     # !! incomplete
-        
+  
     # UPSTREAM BASIN DEMAND
     # basin-wide demand is the sum of user demand upstream of each basin
     # matrix / vector operations:
     # 1 x i list of user demand ∙ i x k user connectivity matrix  = 1 x k basin demand matrix
     basin_rip_demand_data_T = np.matmul(riparian_demand_data, riparian_user_connectivity_matrix_T)
-    
+
     # ALPHA - Not currently used
     # minimum of the ratios of downstream penalties to basin demands, element by element division, division by zero should return 0
     # alpha = min(np.divide(downstream_penalty_list, basin_rip_demand_data_T, out = np.full_like(downstream_penalty_list, 999999999), where=basin_rip_demand_data_T!=0))
@@ -191,7 +201,7 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # Riparian_LP += alpha * pulp.lpSum([basin_proportions[k]*downstream_penalty[k] for k in basins]) - pulp.lpSum([user_allocation[i] for i in rip_users])
     # NEW
     Riparian_LP += pulp.lpSum([user_allocation[i] for i in rip_users]) - pulp.lpSum([basin_proportions[k]*downstream_penalty[k]*basin_demand[k] for k in basins])  
-    
+
     # CONSTRAINTS
     # mass balance
     for k in basins:
@@ -219,74 +229,83 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # populate output table        
     for k in basins:
         rip_basin_proportions_output.loc[k, [day]] = basin_proportions[k].varValue
-
-
-################################    END OF RIPARIAN LP     ##############################
+############    END OF RIPARIAN LP MODULE (BUT NOT END OF FOR LOOP)    ##############################
 #########################################################################################
 #########################################################################################
 
-#%%
+#########################  CALCULATION OF FURTHER OUTPUTS #####################  
+# convert rip output to an array
+rip_basin_proportions_output.sort_index(axis = "index", inplace = True)
+rip_basin_proportions_output.sort_index(axis = "columns", inplace = True)
+basin_proportion_matrix = np.array(rip_basin_proportions_output)
+
+# calculate riparian user allocations as 
+# riparian user allocations (basin proportion * user demand)
+rip_user_allocations_output = pd.DataFrame(((np.matmul(riparian_basin_user_matrix.transpose(), basin_proportion_matrix))*rip_demand_matrix),columns= [output_cols] , index=rip_users)
+rip_user_allocations_output.index.name = "USER"  
+# convert allocations to an array
+rip_user_allocations_matrix = np.array(rip_user_allocations_output)
+# calculate allocations above each basin
+rip_upstream_allocations_matrix = np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix)
+# aggregate basin riparian allocations
+rip_basin_allocations = np.matmul(riparian_basin_user_matrix, rip_user_allocations_matrix)
+rip_basin_allocations_output = pd.DataFrame(rip_basin_allocations, columns=[output_cols], index=basins)
+rip_basin_allocations_output.index.name = "BASIN"
+rip_basin_allocations_matrix = np.array(rip_basin_allocations_output)
+
 #########################  CALCULATION OF NET AVAILABLE FLOW #####################
-    # collect some riparian output
-    dates = data_range["Dates"]
-    rip_demand_matrix = np.array(rip_demand_df[dates])
-    basin_proportion_matrix = np.array(rip_basin_proportions_output[dates])
-    
-    # riparian user allocations (basin proportion * user demand)
-    rip_user_allocations_output = pd.DataFrame(((np.matmul(riparian_basin_user_matrix.transpose(), basin_proportion_matrix))*rip_demand_matrix),columns=[dates], index=rip_users)
-    rip_user_allocations_output.index.name = "USER"    
-    rip_user_allocations_matrix = np.array(rip_user_allocations_output[dates])
-        
-    # aggregate basin riparian allocations
-    rip_basin_allocations = np.matmul(riparian_basin_user_matrix, rip_user_allocations_matrix)
-    rip_basin_allocations_output = pd.DataFrame(rip_basin_allocations, columns=[dates], index=basins)
-    rip_basin_allocations_output.index.name = "BASIN"
-    
-    # accumulated flow not accounting for riparian allocations
-    available_flow_df = pd.DataFrame(available_flow_data, index = basins)
-    available_flow_df.columns= ["cumulative_flow"]
-    # individual basin inflow 
-    available_flow_df["basin_flow"] = pd.DataFrame(net_flow, index = basins)     
-    # aggregate basin riparian allocations from above
-    available_flow_df["basin_allocations"] = rip_basin_allocations_output
-    ### upstream riparian allocations 
-    available_flow_df["rip_upstream_allocations"] =  np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix)
-        
-    available_flow_df["riparian_demand"] = basin_demand_df["riparian_demand"]
-    # NEED TO REMOVE BASINS WITH RIPARIAN SHORTAGE FOR CALCULATIONS BELOW
-    # calculate riparian shortage Y/N (0 = shortage, 1 = not)
-    available_flow_df["short_rip_basins"] = basin_proportion_matrix
-    for k, proportion in enumerate(basin_proportion_matrix):
-        if proportion < 1 and available_flow_df["riparian_demand"][k]> 0:
-            available_flow_df["short_rip_basins"][k] = 0
+# from above
+basin_proportion_matrix # line 233
+rip_user_allocations_matrix  # line 239
+rip_upstream_allocations_matrix # line 241
+rip_basin_allocations_matrix # line 244
+
+
+# Matrices calculated from inputs 
+cumulative_flow_matrix # line
+flow_matrix # line
+rip_basin_demand_matrix # line
+
+# Calculated matrices
+# shorted basins Y/N (with non-zero demand)
+rip_short_basins_matrix = np.zeros(basin_proportion_matrix.shape)
+for k, basin in enumerate(basin_proportion_matrix):
+    for i, date in enumerate(data_range["Dates"].unique()):
+        if basin_proportion_matrix[k][i] < 1 and rip_basin_demand_matrix[k][i] > 0:
+            rip_short_basins_matrix[k][i] = 0
         else:
-            available_flow_df["short_rip_basins"][k] = 1
-       
+            rip_short_basins_matrix[k][i] = 1
+
+
+
     # net available flow:       
     # (cumulative_flow without in basin flow where there is riparian shortage)
     # minus
     # (rip_upstream_allocations - allocations where there is riparian shortage)
-    # replace allocated proportions with rip shortage Y/N
-    basin_proportion_matrix_new = np.array(pd.DataFrame(available_flow_df["short_rip_basins"]) )
-    
-    # recalculate available flow matrix without shorted basin flows 
-    available_flow_df["new_cumulative_flow"] = np.matmul(upstream_connectivity_matrix, np.array(available_flow_df["basin_flow"]*available_flow_df["short_rip_basins"])) 
-    # recalculate user allocations without shorted basin users:
-    rip_user_allocations_output_new = pd.DataFrame(((np.matmul(riparian_basin_user_matrix.transpose(), basin_proportion_matrix_new))*rip_demand_matrix),columns=[dates], index=rip_users)
-    rip_user_allocations_matrix_new = np.array(rip_user_allocations_output_new)
-    available_flow_df["new_upstream_allocations"] =  np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix_new)
-    # availabe flow for appropriatives is new cumulative flows less new upstream allocations   
-    available_flow_df["available_app_flow"] = available_flow_df["new_cumulative_flow"] - available_flow_df["new_upstream_allocations"]
-    
-    # output if desired   
-    available_flow_df.to_csv("output/available_appropriative_flow.csv")
+
+# remove shorted basin flows and recalculate the cumulative flow matrix
+np.array(flow_matrix*rip_short_basins_matrix)
+# new cumulative flow matrix
+cumulative_flow_matrix_new = np.matmul(upstream_connectivity_matrix, np.array(flow_matrix*rip_short_basins_matrix))
+# calculate the quantity to be subtracted
+# recalculate user allocations without shorted basin users:
+rip_user_allocations_matrix_new = np.matmul(riparian_basin_user_matrix.transpose(), rip_short_basins_matrix)*rip_demand_matrix
+# recalculate upstream user allocations without shorted basin users:
+rip_upstream_allocations_matrix_new = np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix_new)
+
+# availabe flow for appropriatives is new cumulative flows less new upstream allocations   
+available_flow_df = pd.DataFrame((cumulative_flow_matrix_new - rip_upstream_allocations_matrix_new), index = basins, columns = output_cols)
+available_flow_df.index.name = "BASIN"
+
+available_flow_df.to_csv("output/available_appropriative_flow.csv")
 #%%
 
 #################################       APPROPRIATIVE_LP   ##############################
 #########################################################################################
 #########################################################################################
 #########################################################################################
-    
+for c, day in enumerate(data_range["Dates"].unique()):
+    print(day)
     appropriative_demand_data = app_demand_df[day].to_numpy()
     priority = app_demand_df["PRIORITY"].to_numpy()
     # shortage pentalty (inverse of priority)      
@@ -295,9 +314,9 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # DICTIONARIES
     app_demand = {app_users[i] : appropriative_demand_data[i] for i, user in enumerate(app_users)}
     shortage_penalty = {app_users[i] : shortage_penalty_data[i] for i, user in enumerate(app_users)}
-    app_available_flow = {basins[k] : available_flow_df["available_app_flow"][k] for k, basin in enumerate(basins)}
-
-    # DEFINE PROBLEM
+    app_available_flow = {basins[k] : available_flow_df[day][k] for k, basin in enumerate(basins)}
+   
+# DEFINE PROBLEM
     Appropriative_LP = pulp.LpProblem("AppropriativeProblem", pulp.LpMinimize)
     
     # DEFINE DECISION VARIABLES
@@ -351,7 +370,7 @@ for c, day in enumerate(data_range["Dates"].unique()):
     
 finish = datetime.datetime.now().time()
 print("Hi. I'm done. Time at completion was:", finish, ". Starting time was:", start)
-
+'''
 #%%
 ################################    END OF APPROPRIATIVE LP  ########################
 #####################################################################################
@@ -481,5 +500,5 @@ combined_user_output_df.to_csv("output/combined_user_output_PORTAL.csv")
 
 
 
-
+'''
 
