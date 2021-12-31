@@ -10,11 +10,11 @@ Created on Wed Feb 12 13:48:44 2020
 import pandas as pd
 import numpy
 
-######################################### YOU NEED TO SPECIFY THE OUTLET HERE !!!!!!!!!!!!!!!!!!!!
+#!!!!!!!!!!!!!!!!!! YOU NEED TO SPECIFY THE OUTLET HERE !!!!!!!!!!!!!!!!!!!!
 
 outlet = "L_21_MSRR"
 
-######################################### YOU NEED TO SPECIFY THE OUTLET ABOVE !!!!!!!!!!!!!!!!!!!!
+#!!!!!!!!!!!!!!!!!! YOU NEED TO SPECIFY THE OUTLET ABOVE !!!!!!!!!!!!!!!!!!!
 
 flow_table_df = pd.read_csv('input/flows.csv', index_col= "BASIN")
 flow_table_df.sort_index(axis = "index", inplace = True)
@@ -39,7 +39,8 @@ cm_df.index.name = "BASIN"
 cm_df.to_csv("input/basin_connectivity_matrix.csv", index = True)
 
 
-
+'''
+# THE MATRICES CONSTRUCTED BELOW ARE NOT NEEDED
 
 # Script that constructs the next_downstream matrix
 # initialize an empty k x k matrix
@@ -67,3 +68,5 @@ for k, basin in enumerate(flow_table_df["FLOWS_TO"]):
 next_up_df = pd.DataFrame(empty_matrix_1, index = basins, columns = basins)
 next_up_df.index.name = "BASIN"
 next_up_df.to_csv("input/next_upstream.csv", index = True)
+
+'''
