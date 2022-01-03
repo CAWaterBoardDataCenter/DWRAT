@@ -18,7 +18,6 @@ def five_sig_figs(x):
     return output
 
 # FIRST SELECT YOUR TIME SERIES DATE FORMAT
-
 # yyyy-mm-dd or yyyy-mm are the recommended daily / monthly date formats. But mm/dd/yyyy and yyyy-m-d are also available.
 
 # a data range can be specified with these two lines:
@@ -40,7 +39,6 @@ data_range["Dates"].to_csv("output/data_range.csv", header = True)
 # check your data range here:
 # data_range["Dates"].unique()
 
-# NOW YOU ARE READY
 # READ IN RAW DATA
 # flow
 start = datetime.datetime.now().time()
@@ -109,9 +107,6 @@ downstream_connectivity_df.sort_index(axis = "columns", inplace = True)
 downstream_connectivity_matrix = downstream_connectivity_df.to_numpy()
 upstream_connectivity_matrix = downstream_connectivity_matrix.T
 
-# # Cumulative (available) flow matrix
-# cumulative_flow_matrix = np.matmul(upstream_connectivity_matrix, flow_table_df)
-
 # basin riparian demand matrix
 rip_basin_demand_matrix = np.matmul(riparian_basin_user_matrix, rip_demand_matrix)
 rip_basin_demand_df = pd.DataFrame(rip_basin_demand_matrix, index = basins, columns = data_range["Dates"].unique())
@@ -120,7 +115,6 @@ rip_basin_demand_df = pd.DataFrame(rip_basin_demand_matrix, index = basins, colu
 # basin appropriative demand matrix
 app_basin_demand_matrix = np.matmul(appropriative_basin_user_matrix, app_demand_matrix)
 app_basin_demand_df = pd.DataFrame(app_basin_demand_matrix, index = basins, columns = data_range["Dates"].unique())
-
 
 ########################### CREATE EMPTY OUTPUT DATAFRAMES #################################
 output_cols = data_range["Dates"].unique().tolist()
@@ -132,7 +126,6 @@ app_user_allocations_output = pd.DataFrame(columns=output_cols, index= app_users
 app_basin_allocations_output = pd.DataFrame(columns=output_cols, index=basins)
 
 ###########################################################################################
-
 
 ################################    START OF RIPARIAN LP     ##############################
 ###########################################################################################
@@ -275,7 +268,6 @@ rip_user_allocations_matrix  # line 239
 rip_upstream_allocations_matrix # line 241
 rip_basin_allocations_matrix # line 244
 
-
 # Matrices calculated from inputs 
 # cumulative_flow_matrix # line
 flow_matrix # line
@@ -290,8 +282,6 @@ for k, basin in enumerate(basin_proportion_matrix):
             rip_short_basins_matrix[k][i] = 0
         else:
             rip_short_basins_matrix[k][i] = 1
-
-
 
     # net available flow:       
     # (cumulative_flow without in basin flow where there is riparian shortage)
@@ -452,23 +442,6 @@ user_output_df_app = user_output_df_app.sort_index(axis=1)
 
 user_output_df_app.to_csv("output/user_appropriative_output" + out_file_name + ".csv")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # riparian user output
 # riparian user shortage
 rip_user_shortage_output = pd.DataFrame(columns=output_cols, index= rip_users)
@@ -494,6 +467,25 @@ user_output_df_rip = pd.merge(user_output_df_rip, rip_user_curtailments_output, 
 user_output_df_rip = user_output_df_rip.sort_index(axis=1)
 
 user_output_df_rip.to_csv("output/user_riparian_output" + out_file_name + ".csv")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #%%
 '''
