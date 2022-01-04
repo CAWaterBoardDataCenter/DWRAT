@@ -392,7 +392,7 @@ print("Hi. I'm done. Time at completion was:", finish, ". Starting time was:", s
 #########################################################################################
 #########################################################################################
 
-out_file_name = "_" + data_range["Dates"].unique()[1] + "_" + data_range["Dates"].unique()[-1]
+out_file_name = "_" + data_range["Dates"].unique()[0] + "_" + data_range["Dates"].unique()[-1]
 
 # riparian basin output
 flows_table = flow_table_df.add_suffix("_FLOW")
