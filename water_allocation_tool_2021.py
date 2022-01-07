@@ -421,7 +421,7 @@ basin_output_df_app.to_csv("output/basin_appropriative_output" + out_file_name +
 # appropriative user shortage
 app_user_shortage_output = pd.DataFrame(columns=output_cols, index= app_users)
 for day in output_cols:
-    app_user_shortage_output[day] = np.divide((app_demand_table[day] - app_user_allocations_output[day]), app_demand_table[day])*100
+    app_user_shortage_output[day] = np.divide((app_demand_table[day] - app_user_allocations_output[day]), app_demand_table[day], out=np.zeros_like((app_demand_table[day] - app_user_allocations_output[day])), where=app_demand_table[day]!=0)*100
     app_user_shortage_output[day][app_user_shortage_output[day] < 1] = 0
 # appropriative user curtailment
 app_user_curtailments_output = pd.DataFrame(columns=output_cols, index= app_users)
