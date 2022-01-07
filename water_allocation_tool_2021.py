@@ -446,7 +446,7 @@ user_output_df_app.to_csv("output/user_appropriative_output" + out_file_name + "
 # riparian user shortage
 rip_user_shortage_output = pd.DataFrame(columns=output_cols, index= rip_users)
 for day in output_cols:
-    rip_user_shortage_output[day] = ((rip_demand_df[day] - rip_user_allocations_output[day])/rip_demand_df[day])*100
+    rip_user_shortage_output[day] = np.divide((rip_demand_df[day] - rip_user_allocations_output[day]), rip_demand_df[day], out=np.zeros_like(rip_demand_df[day] - rip_user_allocations_output[day]), where = rip_demand_df[day]!=0 )*100
     rip_user_shortage_output[day][rip_user_shortage_output[day] < 1] = 0
 # riparian user curtailment
 rip_user_curtailments_output = pd.DataFrame(columns=output_cols, index= rip_users)
