@@ -21,7 +21,7 @@ def five_sig_figs(x):
 # yyyy-mm-dd or yyyy-mm are the recommended daily / monthly date formats. But mm/dd/yyyy and yyyy-m-d are also available.
 
 # a data range can be specified with these two lines:
-dates_to_run = date_string("2021-05", "2021-09")
+dates_to_run = date_string("2021-09", "2021-09")
 dates_to_run.to_csv("input/data_range.csv")
 
 # or just run existing file for evaluation by commenting above out
@@ -212,9 +212,13 @@ for c, day in enumerate(data_range["Dates"].unique()):
 
     # CONSTRAINTS
     # mass balance
+    # OLD
+    # for k in basins:
+    #     Riparian_LP += pulp.lpSum([upstream_allocation[k]]) <= available_flow[k]
+    # NEW
     for k in basins:
-        Riparian_LP += pulp.lpSum([upstream_allocation[k]]) <= available_flow[k]
-    
+        Riparian_LP += upstream_allocation[k] <= available_flow[k]
+        
     # upstream basin's proportion cannot exceed any downstream basins
     # need k by i downstream proportions matrix
     for k in basins:
@@ -222,6 +226,10 @@ for c, day in enumerate(data_range["Dates"].unique()):
         for j in downstream_basins:
             Riparian_LP += basin_proportions[j] <= basin_proportions[k]   
                 
+            
+            
+            
+            
     # SOLVE USING PULP SOLVER
     Riparian_LP.solve()
     print("Status: ", pulp.LpStatus[Riparian_LP.status])

@@ -1,9 +1,11 @@
 .spyproject
 *.MPS
 *.SOL
+input/*.*
+output/*.*
 input_archives/*.*
 output_archives/*.*
 script_archives/*.*
-*.pdf
+
 
 
