@@ -351,14 +351,18 @@ for c, day in enumerate(data_range["Dates"].unique()):
     # CONSTRAINTS:
     # 1.  allocation is <= available flow;
     for basin in basins:
-        Appropriative_LP += pulp.lpSum(upstream_dict[basin]) <= app_available_flow[basin]
+        # Appropriative_LP += pulp.lpSum(upstream_dict[basin]) <= app_available_flow[basin]
+        Appropriative_LP += upstream_dict[basin] <= app_available_flow[basin]
+        
         
     # 2.  allocation is <= to reported demand
     for user in app_users:
-        Appropriative_LP += pulp.lpSum(user_allocation[user]) <= (app_demand[user])
-
-    Appropriative_LP += pulp.lpSum(user_allocation[i] for i in app_users) <= app_available_flow
-       
+        # Appropriative_LP += pulp.lpSum(user_allocation[user]) <= (app_demand[user])
+        Appropriative_LP += user_allocation[user] <= app_demand[user]
+        
+    # 3. 
+    # Appropriative_LP += pulp.lpSum(user_allocation[i] for i in app_users) <= app_available_flow
+        
     # SOLVE USING PULP SOLVER
     Appropriative_LP.solve()
     print("status:", pulp.LpStatus[Appropriative_LP.status])
