@@ -4,21 +4,24 @@ Created on Tue Feb 11 12:29:08 2020
 
 @author: dpedroja
 """
-################################# MAY REQUIRE NUMPY VERSION 1.18.1 #################################### 
-
-def allocation_tool(data_range):
+################################# REQURIES NUMPY VERSION 18.1.1 #################################### 
+def allocation_tool_PVP(data_range):
     import pulp as pulp
     import numpy as np
     np.__version__
     import pandas as pd
     import datetime
     from main_date_range import date_string
-  
+    
+    def five_sig_figs(x):
+        output =  f"{x:.5f}"
+        return output
+    
     # FIRST SELECT YOUR TIME SERIES DATE FORMAT
     # yyyy-mm-dd or yyyy-mm are the recommended daily / monthly date formats. But mm/dd/yyyy and yyyy-m-d are also available.
     
     # a data range can be specified with these two lines:
-#    dates_to_run = date_string("2022-06", "2022-06")
+#    dates_to_run = date_string("2022-07", "2022-09")
 #    dates_to_run.to_csv("input/data_range.csv")
     
     # or just run existing file for evaluation by commenting above out
@@ -67,6 +70,8 @@ def allocation_tool(data_range):
     app_demand_df.sort_index(axis = "index", inplace = True)
     # list of appropriative users
     app_users = app_demand_df.index.values
+    # number of appropriative users 
+    app_users_count = np.size(app_users)
     # appropriative demand values only
     app_demand_table = app_demand_df[data_range["Dates"].unique()]
     # appropriative demand matrix
@@ -121,7 +126,7 @@ def allocation_tool(data_range):
     app_basin_allocations_output = pd.DataFrame(columns=output_cols, index=basins)
     
     ###########################################################################################
-    ###########################################################################################
+    
     ################################    START OF RIPARIAN LP     ##############################
     ###########################################################################################
     ###########################################################################################
@@ -142,16 +147,31 @@ def allocation_tool(data_range):
     
         # DOWNSTREAM PENALTY
         # number of basins upstream of k divided by total basins
+        # matrix / vector operations:
         # row sum of the k x k downstream connectivity matrix / count of  k x 1 list of basins
+        
+        # OLD
+        # downstream_penalty_list = (np.divide(np.sum(riparian_user_connectivity_matrix, 1), np.count_nonzero(rip_users)))
+        # NEW
         downstream_penalty_list = (np.divide(np.sum(upstream_connectivity_matrix, 1), np.count_nonzero(basins)))
         
-        # BASIN RIPARIAN DEMAND + dictionary
-        # basin-wide demand is the sum of user demand upstream of each basin
-        # 1 x i list of user demand ∙ i x k user connectivity matrix  = 1 x k basin demand matrix
+        # BASIN RIPARIAN DEMAND + dictionary 
         basin_demand = {basins[k] : (np.matmul(riparian_basin_user_matrix, riparian_demand_data)[k]) for k, basin in enumerate(basins)}
         # Dataframe same as above
         basin_demand_df = pd.DataFrame.from_dict(basin_demand, orient = "index")
         basin_demand_df.columns = ["riparian_demand"]
+        # matrix / vector operations:
+        # !! incomplete
+      
+        # UPSTREAM BASIN DEMAND
+        # basin-wide demand is the sum of user demand upstream of each basin
+        # matrix / vector operations:
+        # 1 x i list of user demand ∙ i x k user connectivity matrix  = 1 x k basin demand matrix
+        basin_rip_demand_data_T = np.matmul(riparian_demand_data, riparian_user_connectivity_matrix_T)
+    
+        # ALPHA - Not currently used
+        # minimum of the ratios of downstream penalties to basin demands, element by element division, division by zero should return 0
+        # alpha = min(np.divide(downstream_penalty_list, basin_rip_demand_data_T, out = np.full_like(downstream_penalty_list, 999999999), where=basin_rip_demand_data_T!=0))
         
         # DICTIONARIES FOR CONSTRAINTS
         available_flow = {basins[k] : available_flow_data[k] for k, basin in enumerate(basins)}
@@ -169,6 +189,7 @@ def allocation_tool(data_range):
         # USER ALLOCATION
         # user allocation i is their basin's allocation * user i's demand
         # need a 1 x k array of basin proportions ∙ k x i basin user matrix * demand (element-wise) 
+        # matrix / vector operations:
         user_allocation_list = np.multiply((np.matmul(basin_proportions_list.T, riparian_basin_user_matrix)), riparian_demand_data)
         
         # user allocation dictionary
@@ -176,6 +197,7 @@ def allocation_tool(data_range):
         
         # UPSTREAM ALLOCATION: 
         # Sum of user allocations upstream of user i
+        # matrix / vector operations:
         # need k x i upstream user matrix ∙ i by 1 user allocation matrix = k x 1 upstream basin allocation
         upstream_allocation_list = np.matmul(riparian_user_connectivity_matrix, user_allocation_list)
         
@@ -183,10 +205,17 @@ def allocation_tool(data_range):
         upstream_allocation = {basins[k] : upstream_allocation_list[k] for k, basin in enumerate(basins)}
         
         # OBJECTIVE FUNCTION
+        # OLD
+        # Riparian_LP += alpha * pulp.lpSum([basin_proportions[k]*downstream_penalty[k] for k in basins]) - pulp.lpSum([user_allocation[i] for i in rip_users])
+        # NEW
         Riparian_LP += pulp.lpSum([user_allocation[i] for i in rip_users]) - pulp.lpSum([basin_proportions[k]*downstream_penalty[k]*basin_demand[k] for k in basins])  
     
         # CONSTRAINTS
         # mass balance
+        # OLD
+        # for k in basins:
+        #     Riparian_LP += pulp.lpSum([upstream_allocation[k]]) <= available_flow[k]
+        # NEW
         for k in basins:
             Riparian_LP += upstream_allocation[k] <= available_flow[k]
             
@@ -196,6 +225,10 @@ def allocation_tool(data_range):
             downstream_basins = list(downstream_connectivity_df.index[downstream_connectivity_df[k]==1])
             for j in downstream_basins:
                 Riparian_LP += basin_proportions[j] <= basin_proportions[k]   
+                    
+                
+                
+                
                 
         # SOLVE USING PULP SOLVER
         Riparian_LP.solve()
@@ -212,13 +245,11 @@ def allocation_tool(data_range):
         # populate output table        
         for k in basins:
             rip_basin_proportions_output.loc[k, [day]] = basin_proportions[k].varValue
-    
-    #########################################################################################
-    ############    END OF RIPARIAN LP MODULE (BUT NOT END OF FOR LOOP)    ##################
+    ############    END OF RIPARIAN LP MODULE (BUT NOT END OF FOR LOOP)    ##############################
     #########################################################################################
     #########################################################################################
     
-    #########################  CALCULATION OF FURTHER OUTPUTS ###############################  
+    #########################  CALCULATION OF FURTHER OUTPUTS #####################  
     # convert rip output to an array
     rip_basin_proportions_output.sort_index(axis = "index", inplace = True)
     rip_basin_proportions_output.sort_index(axis = "columns", inplace = True)
@@ -230,12 +261,26 @@ def allocation_tool(data_range):
     rip_user_allocations_output.index.name = "USER"  
     # convert allocations to an array
     rip_user_allocations_matrix = np.array(rip_user_allocations_output)
+    # calculate allocations above each basin
+    rip_upstream_allocations_matrix = np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix)
     # aggregate basin riparian allocations
     rip_basin_allocations = np.matmul(riparian_basin_user_matrix, rip_user_allocations_matrix)
     rip_basin_allocations_output = pd.DataFrame(rip_basin_allocations, columns= output_cols, index=basins)
     rip_basin_allocations_output.index.name = "BASIN"
+    rip_basin_allocations_matrix = np.array(rip_basin_allocations_output)
     
     #########################  CALCULATION OF NET AVAILABLE FLOW #####################
+    # from above
+    basin_proportion_matrix # line 233
+    rip_user_allocations_matrix  # line 239
+    rip_upstream_allocations_matrix # line 241
+    rip_basin_allocations_matrix # line 244
+    
+    # Matrices calculated from inputs 
+    # cumulative_flow_matrix # line
+    flow_matrix # line
+    rip_basin_demand_matrix # line
+    
     # Calculated matrices
     # shorted basins Y/N (with non-zero demand)
     rip_short_basins_matrix = np.zeros(basin_proportion_matrix.shape)
@@ -246,13 +291,12 @@ def allocation_tool(data_range):
             else:
                 rip_short_basins_matrix[k][i] = 1
     
-    # net available flow:       
-    # (cumulative_flow without in basin flow where there is riparian shortage)
-    # minus
-    # (rip_upstream_allocations - allocations where there is riparian shortage)
+        # net available flow:       
+        # (cumulative_flow without in basin flow where there is riparian shortage)
+        # minus
+        # (rip_upstream_allocations - allocations where there is riparian shortage)
     
     # remove shorted basin flows and recalculate the cumulative flow matrix
-    np.array(flow_matrix*rip_short_basins_matrix)
     # new cumulative flow matrix
     cumulative_flow_matrix_new = np.matmul(upstream_connectivity_matrix, np.array(flow_matrix*rip_short_basins_matrix))
     # calculate the quantity to be subtracted
@@ -260,17 +304,34 @@ def allocation_tool(data_range):
     rip_user_allocations_matrix_new = np.matmul(riparian_basin_user_matrix.transpose(), rip_short_basins_matrix)*rip_demand_matrix
     # recalculate upstream user allocations without shorted basin users:
     rip_upstream_allocations_matrix_new = np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix_new)
-    
     # availabe flow for appropriatives is new cumulative flows less new upstream allocations   
     available_flow_df = pd.DataFrame((cumulative_flow_matrix_new - rip_upstream_allocations_matrix_new), index = basins, columns = output_cols)
     available_flow_df.index.name = "BASIN"
     
-    #########################################################################################
-    #########################################################################################
+    
+    rip_demand_df = pd.read_csv('input/riparian_demand.csv')
+    rip_demand_df.set_index("USER", inplace = True)
+    rip_demand_df.sort_index(axis = "index", inplace = True)
+    rip_demand_df = rip_demand_df[data_range["Dates"].unique()]
+    
+###############################################################################################    
+    # PVP flows modification
+    pvp_flow_mod = pd.read_csv('input/pvp_flow_mod.csv') 
+    pvp_flow_mod.set_index("BASIN", inplace = True)
+    pvp_flow_mod.sort_index(axis = "index", inplace = True)
+    pvp_flow_mod = pvp_flow_mod[data_range["Dates"].unique()]
+    
+    # calculate cumulative pvp flows
+    pvp_flow_mod_matrix = np.matmul(upstream_connectivity_matrix, pvp_flow_mod)
+    # then add cumulative PVP flows:
+    available_flow_df =  available_flow_df + pvp_flow_mod_matrix
+    
+###############################################################################################
+    
     #################################       APPROPRIATIVE_LP   ##############################
     #########################################################################################
     #########################################################################################
-    
+    #########################################################################################
     for c, day in enumerate(data_range["Dates"].unique()):
         print(day)
         appropriative_demand_data = app_demand_df[day].to_numpy()
@@ -296,7 +357,9 @@ def allocation_tool(data_range):
         
         # UPSTREAM APPROPRIATIVE BASIN ALLOCATION
         # sum of appropriative allocations upstream of basin k
+        # Matrix/vector operations
         # k by i upstream matrix ∙ i by 1 user_allocation for a k by 1 result constrained to available flow.
+    
         upstream_basin_allocation = np.matmul(appropriative_user_connectivity_matrix, user_allocation_list)
         # dictionary
         upstream_dict = {basins[k] : upstream_basin_allocation[k] for k, basin in enumerate(basins)}
@@ -307,10 +370,15 @@ def allocation_tool(data_range):
             # Appropriative_LP += pulp.lpSum(upstream_dict[basin]) <= app_available_flow[basin]
             Appropriative_LP += upstream_dict[basin] <= app_available_flow[basin]
             
+            
         # 2.  allocation is <= to reported demand
         for user in app_users:
+            # Appropriative_LP += pulp.lpSum(user_allocation[user]) <= (app_demand[user])
             Appropriative_LP += user_allocation[user] <= app_demand[user]
-       
+            
+        # 3. 
+        # Appropriative_LP += pulp.lpSum(user_allocation[i] for i in app_users) <= app_available_flow
+            
         # SOLVE USING PULP SOLVER
         Appropriative_LP.solve()
         print("status:", pulp.LpStatus[Appropriative_LP.status])
@@ -336,19 +404,22 @@ def allocation_tool(data_range):
         # populate output table        
         for k, basin in enumerate(basins):
             app_basin_allocations_output.loc[basin, [day]] = app_basin_allocations[k]
-      
+            
+       
     finish = datetime.datetime.now().time()
     print("Hi. I'm done. Time at completion was:", finish, ". Starting time was:", start)
     
-    #####################################################################################
+    app_basin_allocations.sum()
+    
     ################################    END OF APPROPRIATIVE LP  ########################
     #####################################################################################
     #####################################################################################
     
-    #####################################################################################
-    #################################  WRITING OUTPUT TO .CSV FILES #####################
-    #####################################################################################
-    #####################################################################################
+    #%%
+    #################################  WRITING OUTPUT TO .CSV FILES #########################
+    #########################################################################################
+    #########################################################################################
+    #########################################################################################
     
     out_file_name = "_" + data_range["Dates"].unique()[0] + "_" + data_range["Dates"].unique()[-1]
     
@@ -426,7 +497,7 @@ def allocation_tool(data_range):
     
     user_output_df_rip.to_csv("output/user_riparian_output" + out_file_name + ".csv")
     
-    
+
 
 
 
