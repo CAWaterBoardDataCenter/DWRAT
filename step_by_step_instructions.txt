@@ -1,6 +1,0 @@
-
-1. Copy previous UPPER_RUSSIAN_RIVER and LOWER_RUSSIAN_RIVER folders in OUTPUT_ARCHIVES
-2. Empty all output folders to avoid confusion (files will simply be overwritten) it this is not done.
-3. Set values for PVP flows in UPPER_RUSSIAN_RIVER/module_2/config_file.csv
-4. Delete all input files EXCEPT flows.csv in UPPER_RUSSIAN_RIVER/module_1/input to avoid confusion (files will simply be overwritten) it this is not done.
-5. 

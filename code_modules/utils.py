@@ -18,20 +18,20 @@ def get_paths(folder):
             paths_list.append(full_path)
     return paths_list
 
-def Y_D(mdy):
+#if __name__ == "__main__":
+    basins_paths = "SUPPLY/basins.csv"
+    flows_path = "SUPPLY/Monthly_AcFt_RR_Independent__to_7.18.22_CNRFC_to_7.24.22_ZERO_PRECIP_Jul25_to_Oct31.csv"
+def M_D_Y(mdy):
     x = '{:%Y-%m}'.format(dt.strptime(mdy, "%m/%d/%Y"))
     return x
-def Y_M_D(ymd):
-    x = '{:%Y-%m}'.format(dt.strptime(ymd, "%Y-%m-%d"))
-    return x
-
-if __name__ == "__main__":
-    path_1 = "SUPPLY/basins.csv"
-    path_2 = "SUPPLY/Monthly_AcFt_RR_Independent_ZERO_PRECIP_Jun22_to_Oct31.csv"
+#def Y_M_D(ymd):
+#    x = '{:%Y-%m}'.format(dt.strptime(ymd, "%Y-%m-%d"))
+#    return x
+def process_prms_flows(basins_paths, flows_path):
     
-def process_prms_flows(path):
+    
     # read in basins.csv
-    basins = pd.read_csv(path)
+    basins = pd.read_csv(basins_paths)
     # select headwater basins
     headwater_basins = basins[basins["MAINSTEM"] == "N"]
     headwater_basins = headwater_basins[["BASIN", "FLOWS_TO"]]
@@ -40,11 +40,11 @@ def process_prms_flows(path):
     mainstem_basins = basins[basins["MAINSTEM"] == "Y"]
     mainstem_basins = mainstem_basins[["BASIN", "FLOWS_TO"]]
     mainstem_basins.set_index("BASIN", inplace = True, drop = True)
+    basins.set_index("BASIN", inplace = True)
     # read in raw flows
-    path_2 = "SUPPLY/Monthly_AcFt_RR_Independent_ZERO_PRECIP_Jun22_to_Oct31.csv"
-    flows = pd.read_csv(path_2, dtype = {"Date" : str})
+    flows = pd.read_csv(flows_path, dtype = {"Date" : str})
     # change date format
-    flows["Date"] = flows["Date"].apply(Y_M_D)
+    flows["Date"] = flows["Date"].apply(M_D_Y)
     # add these dates to headwater_basins and mainstem_basins
     for date in flows["Date"].values:
         mainstem_basins[date] = 0
@@ -57,10 +57,16 @@ def process_prms_flows(path):
     flows.index.name = "BASIN"
     flows.columns = flows.columns.values
     flows.insert(0, "FLOWS_TO", headwater_basins["FLOWS_TO"].values)
-    # merge & sort
+        # merge & sort
     all_flows = pd.concat([flows, mainstem_basins], axis = 0)
     all_flows = all_flows.sort_index()
+    all_flows.insert(1, "UPPER_RUSSIAN", basins["UPPER_RUSSIAN"].values)
     all_flows.to_csv("SUPPLY/all_flows_processed.csv")
+    return all_flows
+    
+   
+    
+    
     
 def make_date_strings(date_format, first, last):
     dates_list = pd.date_range(start=first, end=last)
