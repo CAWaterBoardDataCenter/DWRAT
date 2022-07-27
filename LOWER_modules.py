@@ -292,4 +292,4 @@ appropriative_MS_alloc = user_app_2[month + "_ALLOCATIONS"].sum()
 appropriative_MS_demand = user_app_2[month + "_DEMAND"].sum()
 app_MS_shortage = appropriative_MS_demand - appropriative_MS_alloc
 
-flow_to_lower_RR = net_PVP - appropriative_MS_alloc
+flow_at_outlet = net_PVP - appropriative_MS_alloc
