@@ -56,7 +56,7 @@ mod_1_path, mod_2_path, combined_output_path, demand_path = make_paths("LOWER")
 ##################################################################################
 # need a list of basins with mainstem/headwater indicated, plus path for raw PRMS output
 # DON'T FORGET TO OFFSET THE NEGATIVES IN THE LOWER
-all_flows = utils.process_prms_flows("SUPPLY/basins.csv", "SUPPLY/Monthly_AcFt_RR_Independent__to_7.18.22_CNRFC_to_7.24.22_ZERO_PRECIP_Jul25_to_Oct31.csv")
+all_flows = utils.process_prms_flows("SUPPLY/basins.csv", "SUPPLY/Monthly_AcFt_RR_Independent_ZERO_PRECIP_Jul25_to_Oct31.csv")
 # Change working directory to module 1
 os.chdir(mod_1_path)
 flows = all_flows[all_flows["UPPER_RUSSIAN"]=="N"]

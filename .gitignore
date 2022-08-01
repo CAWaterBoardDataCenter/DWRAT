@@ -1,0 +1,14 @@
+.spyproject
+*.MPS
+*.SOL
+script_archives/*.*
+
+__pycache__
+
+DEMAND/Archive/*.*
+
+OUTPUT_ARCHIVES/*.*
+
+*.docx
+
+
