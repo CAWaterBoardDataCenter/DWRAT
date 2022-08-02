@@ -1,14 +1,7 @@
 .spyproject
 *.MPS
 *.SOL
-script_archives/*.*
-
 __pycache__
-
-DEMAND/*/
-
-OUTPUT_ARCHIVES/*/
-
-*.docx
+*.pdf
 
 
