@@ -5,9 +5,9 @@ script_archives/*.*
 
 __pycache__
 
-DEMAND/Archive/*.*
+DEMAND/*/
 
-OUTPUT_ARCHIVES/*.*
+OUTPUT_ARCHIVES/*/
 
 *.docx
 
