@@ -166,36 +166,25 @@ flows_proportional.insert(0, "FLOWS_TO", flows["FLOWS_TO"].values)
 def calculations(data_range, UPPER_LOWER):
     for date in data_range["Dates"].unique():
         flows_proportional[date] = np.divide(flows[date], sum(flows[date])).values
-        print(flows_proportional[date])
         sum_nat_flow = sum(flows[date])
         sum_nat_allocations = sum(basin_app[date + "_ALLOCATIONS"] + basin_rip[date + "_ALLOCATIONS"])
         net_nat_flow = sum_nat_flow - sum_nat_allocations
-        if config_file.loc["PVP_FLOW"][date] <= (config_file.loc["EVAP_LOSS"][date] / 3): 
-            evap_loss_share = config_file.loc["EVAP_LOSS"][date] / 2
-            pvp = 0
-            print(evap_loss_share)
-        else:
-            evap_loss_share = config_file.loc["EVAP_LOSS"][date] / 3
-            pvp = max(0, config_file.loc["PVP_FLOW"][date] - evap_loss_share)
-            print(evap_loss_share)
+        evap_loss_share = config_file.loc["EVAP_LOSS"][date] / 3
         def_surp = net_nat_flow - evap_loss_share
+        pvp = max(0, config_file.loc["PVP_FLOW"][date] - evap_loss_share)
         flows_proportional[date] = flows_proportional[date] * max(0, def_surp)
         if def_surp > 0 and UPPER_LOWER == "UPPER":
             pvp_flow_mod.loc["R_02_M", date] = pvp_flow_mod.loc["R_02_M"][date] + pvp
             net_PVP = pvp
-            print(def_surp, net_PVP, ">, UPPER")
         elif def_surp > 0 and UPPER_LOWER == "LOWER":
             pvp_flow_mod.loc["R_17_M", date] = pvp_flow_mod.loc["R_17_M"][date] + pvp
             net_PVP = pvp
-            print(def_surp, net_PVP, ">, LOWER")
         elif def_surp < 0 and UPPER_LOWER == "UPPER":
             pvp_flow_mod.loc["R_02_M", date] = max(0, pvp_flow_mod.loc["R_02_M"][date] + pvp + def_surp)       
             net_PVP = max(0, pvp + def_surp)
-            print(def_surp, net_PVP, "<, UPPER")
         elif def_surp < 0 and UPPER_LOWER == "LOWER":
             pvp_flow_mod.loc["R_17_M", date] = max(0, pvp_flow_mod.loc["R_17_M"][date] + pvp + def_surp)       
             net_PVP = max(0, pvp + def_surp)
-            print(def_surp, net_PVP, "<, LOWER")
         # write flows (even if 0)
         flows_proportional.to_csv("input/flows.csv")
         # write PVP flows
