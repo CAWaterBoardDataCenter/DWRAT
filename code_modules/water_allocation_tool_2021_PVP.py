@@ -9,7 +9,7 @@ import pulp as pulp
 import numpy as np
 import pandas as pd
 import datetime
-from code_modules import utils
+#from code_modules import utils
 
 
 # IF INVOKING SCRIPT DIRECTLY, CHOOSE TIME SERIES DATE FORMAT AND DATES DIRECTLY !!!!!!!
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     # MONTHLY:  yyyy-mm, 
     # DAILY:    yyyy-mm-dd, yyyy-m-d, m/d/yyyy
 ################# ENTER FORMAT, FIRST AND LAST DATES ACCORDINGLY: ######################### 
-    (date_format, first, last) = ("yyyy-mm", "2022-07", "2022-07")
+    (date_format, first, last) = ("yyyy-mm", "2022-08", "2022-08")
 ################# COPY FORMAT SELECTED FROM ABOVE INTO CODE BELOW: ######################### 
     data_range = utils.make_date_strings(first, last)
     data_range["Dates"] = data_range["yyyy-mm"]    
@@ -267,7 +267,12 @@ def PVP_main(data_range):
                 rip_short_basins_matrix[k][i] = 0
             else:
                 rip_short_basins_matrix[k][i] = 1
-    
+    for k, basin in enumerate(rip_short_basins_matrix):
+        if rip_short_basins_matrix[k] == 0:
+            for i, j in enumerate(upstream_connectivity_matrix[k]):
+                if j == 1:
+                    rip_short_basins_matrix[i] = 0
+                
         # net available flow:       
         # (cumulative_flow without in basin flow where there is riparian shortage)
         # minus

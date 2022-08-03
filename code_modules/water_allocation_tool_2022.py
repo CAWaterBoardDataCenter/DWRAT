@@ -232,7 +232,11 @@ def main(data_range):
                 rip_short_basins_matrix[k][i] = 0
             else:
                 rip_short_basins_matrix[k][i] = 1
-    
+    for k, basin in enumerate(rip_short_basins_matrix):
+        if rip_short_basins_matrix[k] == 0:
+            for i, j in enumerate(upstream_connectivity_matrix[k]):
+                if j == 1:
+                    rip_short_basins_matrix[i] = 0
     # net available flow:       
     # (cumulative_flow without in basin flow where there is riparian shortage)
     # minus

@@ -162,35 +162,47 @@ flows_proportional.insert(0, "FLOWS_TO", flows["FLOWS_TO"].values)
 
 # This loop calculates remaining natural flow per basin and applies evaporative losses,
 # and thereby generates the flows.csv for module 2 as well as PVP flows for the pvp_flow_mod.csv
+
 def calculations(data_range, UPPER_LOWER):
     for date in data_range["Dates"].unique():
         flows_proportional[date] = np.divide(flows[date], sum(flows[date])).values
-        sum_flow = sum(flows[date])
-        sum_allocations = sum(basin_app[date + "_ALLOCATIONS"] + basin_rip[date + "_ALLOCATIONS"])
-        net = sum_flow - sum_allocations
-        evap_loss_share = config_file.loc["EVAP_LOSS"][date] / 3
-        def_surp = net - evap_loss_share
-        pvp = max(0, config_file.loc["PVP_FLOW"][date] - evap_loss_share)
+        print(flows_proportional[date])
+        sum_nat_flow = sum(flows[date])
+        sum_nat_allocations = sum(basin_app[date + "_ALLOCATIONS"] + basin_rip[date + "_ALLOCATIONS"])
+        net_nat_flow = sum_nat_flow - sum_nat_allocations
+        if config_file.loc["PVP_FLOW"][date] <= (config_file.loc["EVAP_LOSS"][date] / 3): 
+            evap_loss_share = config_file.loc["EVAP_LOSS"][date] / 2
+            pvp = 0
+            print(evap_loss_share)
+        else:
+            evap_loss_share = config_file.loc["EVAP_LOSS"][date] / 3
+            pvp = max(0, config_file.loc["PVP_FLOW"][date] - evap_loss_share)
+            print(evap_loss_share)
+        def_surp = net_nat_flow - evap_loss_share
         flows_proportional[date] = flows_proportional[date] * max(0, def_surp)
         if def_surp > 0 and UPPER_LOWER == "UPPER":
             pvp_flow_mod.loc["R_02_M", date] = pvp_flow_mod.loc["R_02_M"][date] + pvp
             net_PVP = pvp
+            print(def_surp, net_PVP, ">, UPPER")
         elif def_surp > 0 and UPPER_LOWER == "LOWER":
             pvp_flow_mod.loc["R_17_M", date] = pvp_flow_mod.loc["R_17_M"][date] + pvp
             net_PVP = pvp
+            print(def_surp, net_PVP, ">, LOWER")
         elif def_surp < 0 and UPPER_LOWER == "UPPER":
-            pvp_flow_mod.loc["R_02_M", date] = pvp_flow_mod.loc["R_02_M"][date] + pvp + def_surp       
-            net_PVP = pvp + def_surp
+            pvp_flow_mod.loc["R_02_M", date] = max(0, pvp_flow_mod.loc["R_02_M"][date] + pvp + def_surp)       
+            net_PVP = max(0, pvp + def_surp)
+            print(def_surp, net_PVP, "<, UPPER")
         elif def_surp < 0 and UPPER_LOWER == "LOWER":
-            pvp_flow_mod.loc["R_17_M", date] = pvp_flow_mod.loc["R_17_M"][date] + pvp + def_surp       
-            net_PVP = pvp + def_surp
+            pvp_flow_mod.loc["R_17_M", date] = max(0, pvp_flow_mod.loc["R_17_M"][date] + pvp + def_surp)       
+            net_PVP = max(0, pvp + def_surp)
+            print(def_surp, net_PVP, "<, LOWER")
         # write flows (even if 0)
         flows_proportional.to_csv("input/flows.csv")
         # write PVP flows
         pvp_flow_mod.to_csv("input/pvp_flow_mod.csv")
-        return net_PVP
+        return (net_PVP, def_surp)
 # run function
-net_PVP = calculations(data_range, "LOWER")
+(net_PVP, def_surp) = calculations(data_range, "LOWER")
 
 ##################################################################################
 ################ UPPER/LOWER RUSSIAN RIVER INPUTS FOR MODULE 2 (MAINSTEM) ########
@@ -216,6 +228,9 @@ riparian_user_matrices.riparian_user_matrices_main()
 # RUN PVP ALLOCATION TOOL VERSION FOR MODULE 2
 # use code_module
 (basin_app_2, basin_rip_2, user_app_2, user_rip_2) = water_allocation_tool_2021_PVP.PVP_main(data_range)
+
+#sum(basin_rip_2["2022-08_FLOW"])
+#sum(basin_rip_2["2022-08_ALLOCATIONS"])
 
 ##################################################################################
 ######################### COMBINE MODULE 1 AND MODULE 2 OUTPUTS ##################
@@ -292,4 +307,3 @@ appropriative_MS_alloc = user_app_2[month + "_ALLOCATIONS"].sum()
 appropriative_MS_demand = user_app_2[month + "_DEMAND"].sum()
 app_MS_shortage = appropriative_MS_demand - appropriative_MS_alloc
 
-flow_at_outlet = net_PVP - appropriative_MS_alloc
