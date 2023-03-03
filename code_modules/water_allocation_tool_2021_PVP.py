@@ -4,7 +4,7 @@ Created on Tue Feb 11 12:29:08 2020
 
 @author: dpedroja
 """
-####### MAY REQUIRE NUMPY VERSION 1.18.1; CHECK WITH  np.__version__ BELOW ######
+
 import pulp as pulp
 import numpy as np
 import pandas as pd
@@ -14,7 +14,6 @@ import datetime
 
 # IF INVOKING SCRIPT DIRECTLY, CHOOSE TIME SERIES DATE FORMAT AND DATES DIRECTLY !!!!!!!
 if __name__ == "__main__":
-    print(np.__version__)
 ########################  SELECT AMONG FORMAT OPTIONS BELOW: ###########################    
     # MONTHLY:  yyyy-mm, 
     # DAILY:    yyyy-mm-dd, yyyy-m-d, m/d/yyyy
@@ -94,12 +93,12 @@ def PVP_main(data_range):
     upstream_connectivity_matrix = downstream_connectivity_matrix.T
     
     # basin riparian demand matrix
-    rip_basin_demand_matrix = np.matmul(riparian_basin_user_matrix, rip_demand_matrix)
+    rip_basin_demand_matrix = np.dot(riparian_basin_user_matrix, rip_demand_matrix)
     rip_basin_demand_df = pd.DataFrame(rip_basin_demand_matrix, index = basins, columns = data_range["Dates"].unique())
     # rip_basin_demand_df = pd.DataFrame(np.matmul(riparian_basin_user_matrix, rip_demand_matrix), index = basins, columns = [data_range["Dates"].unique()])
     
     # basin appropriative demand matrix
-    app_basin_demand_matrix = np.matmul(appropriative_basin_user_matrix, app_demand_matrix)
+    app_basin_demand_matrix = np.dot(appropriative_basin_user_matrix, app_demand_matrix)
     app_basin_demand_df = pd.DataFrame(app_basin_demand_matrix, index = basins, columns = data_range["Dates"].unique())
     
     ########################### CREATE EMPTY OUTPUT DATAFRAMES #################################
@@ -129,7 +128,7 @@ def PVP_main(data_range):
         # matrix / vector operations:
         # upstream connectivity matrix * net flow
         # (k x k) * (k x 1) = k x 1 list of available net basin flows
-        available_flow_data = np.matmul(upstream_connectivity_matrix, net_flow.T) 
+        available_flow_data = np.dot(upstream_connectivity_matrix, net_flow.T) 
     
         # DOWNSTREAM PENALTY
         # number of basins upstream of k divided by total basins
@@ -142,7 +141,7 @@ def PVP_main(data_range):
         downstream_penalty_list = (np.divide(np.sum(upstream_connectivity_matrix, 1), np.count_nonzero(basins)))
         
         # BASIN RIPARIAN DEMAND + dictionary 
-        basin_demand = {basins[k] : (np.matmul(riparian_basin_user_matrix, riparian_demand_data)[k]) for k, basin in enumerate(basins)}
+        basin_demand = {basins[k] : (np.dot(riparian_basin_user_matrix, riparian_demand_data)[k]) for k, basin in enumerate(basins)}
         # Dataframe same as above
         basin_demand_df = pd.DataFrame.from_dict(basin_demand, orient = "index")
         basin_demand_df.columns = ["riparian_demand"]
@@ -153,7 +152,7 @@ def PVP_main(data_range):
         # basin-wide demand is the sum of user demand upstream of each basin
         # matrix / vector operations:
         # 1 x i list of user demand ∙ i x k user connectivity matrix  = 1 x k basin demand matrix
-        basin_rip_demand_data_T = np.matmul(riparian_demand_data, riparian_user_connectivity_matrix_T)
+        basin_rip_demand_data_T = np.dot(riparian_demand_data, riparian_user_connectivity_matrix_T)
         # DICTIONARIES FOR CONSTRAINTS
         available_flow = {basins[k] : available_flow_data[k] for k, basin in enumerate(basins)}
         downstream_penalty = {basins[k] : downstream_penalty_list[k] for k, basin in enumerate(basins)}
@@ -171,7 +170,7 @@ def PVP_main(data_range):
         # user allocation i is their basin's allocation * user i's demand
         # need a 1 x k array of basin proportions ∙ k x i basin user matrix * demand (element-wise) 
         # matrix / vector operations:
-        user_allocation_list = np.multiply((np.matmul(basin_proportions_list.T, riparian_basin_user_matrix)), riparian_demand_data)
+        user_allocation_list = np.multiply((np.dot(basin_proportions_list.T, riparian_basin_user_matrix)), riparian_demand_data)
         
         # user allocation dictionary
         user_allocation = {rip_users[i] : user_allocation_list[i] for i, user in enumerate(rip_users)}
@@ -180,7 +179,7 @@ def PVP_main(data_range):
         # Sum of user allocations upstream of user i
         # matrix / vector operations:
         # need k x i upstream user matrix ∙ i by 1 user allocation matrix = k x 1 upstream basin allocation
-        upstream_allocation_list = np.matmul(riparian_user_connectivity_matrix, user_allocation_list)
+        upstream_allocation_list = np.dot(riparian_user_connectivity_matrix, user_allocation_list)
         
         # upstream allocation dictionary
         upstream_allocation = {basins[k] : upstream_allocation_list[k] for k, basin in enumerate(basins)}
@@ -234,14 +233,14 @@ def PVP_main(data_range):
     
     # calculate riparian user allocations as 
     # riparian user allocations (basin proportion * user demand)
-    rip_user_allocations_output = pd.DataFrame(((np.matmul(riparian_basin_user_matrix.transpose(), basin_proportion_matrix))*rip_demand_matrix),columns = output_cols , index=rip_users)
+    rip_user_allocations_output = pd.DataFrame(((np.dot(riparian_basin_user_matrix.transpose(), basin_proportion_matrix))*rip_demand_matrix),columns = output_cols , index=rip_users)
     rip_user_allocations_output.index.name = "USER"  
     # convert allocations to an array
     rip_user_allocations_matrix = np.array(rip_user_allocations_output)
     # calculate allocations above each basin
-    rip_upstream_allocations_matrix = np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix)
+    rip_upstream_allocations_matrix = np.dot(riparian_user_connectivity_matrix, rip_user_allocations_matrix)
     # aggregate basin riparian allocations
-    rip_basin_allocations = np.matmul(riparian_basin_user_matrix, rip_user_allocations_matrix)
+    rip_basin_allocations = np.dot(riparian_basin_user_matrix, rip_user_allocations_matrix)
     rip_basin_allocations_output = pd.DataFrame(rip_basin_allocations, columns= output_cols, index=basins)
     rip_basin_allocations_output.index.name = "BASIN"
     rip_basin_allocations_matrix = np.array(rip_basin_allocations_output)
@@ -280,12 +279,12 @@ def PVP_main(data_range):
     
     # remove shorted basin flows and recalculate the cumulative flow matrix
     # new cumulative flow matrix
-    cumulative_flow_matrix_new = np.matmul(upstream_connectivity_matrix, np.array(flow_matrix*rip_short_basins_matrix))
+    cumulative_flow_matrix_new = np.dot(upstream_connectivity_matrix, np.array(flow_matrix*rip_short_basins_matrix))
     # calculate the quantity to be subtracted
     # recalculate user allocations without shorted basin users:
-    rip_user_allocations_matrix_new = np.matmul(riparian_basin_user_matrix.transpose(), rip_short_basins_matrix)*rip_demand_matrix
+    rip_user_allocations_matrix_new = np.dot(riparian_basin_user_matrix.transpose(), rip_short_basins_matrix)*rip_demand_matrix
     # recalculate upstream user allocations without shorted basin users:
-    rip_upstream_allocations_matrix_new = np.matmul(riparian_user_connectivity_matrix, rip_user_allocations_matrix_new)
+    rip_upstream_allocations_matrix_new = np.dot(riparian_user_connectivity_matrix, rip_user_allocations_matrix_new)
     # availabe flow for appropriatives is new cumulative flows less new upstream allocations   
     available_flow_df = pd.DataFrame((cumulative_flow_matrix_new - rip_upstream_allocations_matrix_new), index = basins, columns = output_cols)
     available_flow_df.index.name = "BASIN"
@@ -304,7 +303,7 @@ def PVP_main(data_range):
     pvp_flow_mod = pvp_flow_mod[data_range["Dates"].unique()]
     
     # calculate cumulative pvp flows
-    pvp_flow_mod_matrix = np.matmul(upstream_connectivity_matrix, pvp_flow_mod)
+    pvp_flow_mod_matrix = np.dot(upstream_connectivity_matrix, pvp_flow_mod)
     # then add cumulative PVP flows:
     available_flow_df =  available_flow_df + pvp_flow_mod_matrix
     
@@ -342,7 +341,7 @@ def PVP_main(data_range):
         # Matrix/vector operations
         # k by i upstream matrix ∙ i by 1 user_allocation for a k by 1 result constrained to available flow.
     
-        upstream_basin_allocation = np.matmul(appropriative_user_connectivity_matrix, user_allocation_list)
+        upstream_basin_allocation = np.dot(appropriative_user_connectivity_matrix, user_allocation_list)
         # dictionary
         upstream_dict = {basins[k] : upstream_basin_allocation[k] for k, basin in enumerate(basins)}
         
@@ -373,7 +372,7 @@ def PVP_main(data_range):
         for i, user in enumerate(app_users):
             user_allocations.append(user_allocation[user].value())
     
-        app_basin_allocations = np.matmul(appropriative_basin_user_matrix, user_allocations)
+        app_basin_allocations = np.dot(appropriative_basin_user_matrix, user_allocations)
         
         print("Basin Appropriative Allocations:") 
         print(app_basin_allocations)
